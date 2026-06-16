@@ -1,0 +1,82 @@
+{
+  "name": "e2speed",
+  "productName": "E2Speed",
+  "version": "0.0.1",
+  "private": true,
+  "description": "E2Speed desktop GUI for iperf3",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.main.json --watch --preserveWatchOutput\" \"wait-on http://127.0.0.1:5173 dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.7.7",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.19",
+    "wait-on": "^7.2.0"
+  },
+    "build": {
+    "appId": "com.e2speed.desktop",
+    "productName": "E2Speed",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "willjohn6366-sketch",
+        "repo": "E2Speed"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "dist/**/*",
+      "build/icon.png",
+      "version.json",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../resources",
+        "to": "resources"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

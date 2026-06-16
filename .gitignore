@@ -1,0 +1,89 @@
+# macOS / editor
+.DS_Store
+._*
+.idea/
+.vscode/
+
+# Local environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# User test data and exported reports
+reports/
+report/
+exports/
+desktop/reports/
+desktop/exports/
+image.png
+image-*.png
+*测试报告*.pdf
+*测速报告*.pdf
+*链路测试报告*.pdf
+*report*.pdf
+*Report*.pdf
+*.jsonl
+*.har
+
+# Node / Electron
+desktop/node_modules/
+desktop/dist/
+desktop/.vite/
+desktop/release/
+desktop/out/
+desktop/*.tsbuildinfo
+
+# Generated packages and installers
+*.dmg
+*.zip
+*.exe
+*.AppImage
+*.deb
+*.rpm
+
+# Do not publish local certificates or ad-hoc signing material.
+*.pem
+*.key
+*.p12
+*.cer
+*.crt
+
+# Autotools build outputs inside the vendored iperf tree.
+vendor/iperf-3.21/.deps/
+vendor/iperf-3.21/.libs/
+vendor/iperf-3.21/autom4te.cache/
+vendor/iperf-3.21/Makefile
+vendor/iperf-3.21/config.cache
+vendor/iperf-3.21/config.log
+vendor/iperf-3.21/config.status
+vendor/iperf-3.21/libtool
+vendor/iperf-3.21/iperf3.spec
+vendor/iperf-3.21/src/.deps/
+vendor/iperf-3.21/src/.libs/
+vendor/iperf-3.21/src/Makefile
+vendor/iperf-3.21/src/*.o
+vendor/iperf-3.21/src/*.lo
+vendor/iperf-3.21/src/*.la
+vendor/iperf-3.21/src/iperf3
+vendor/iperf-3.21/src/iperf_config.h
+vendor/iperf-3.21/src/stamp-h1
+vendor/iperf-3.21/src/version.h
+vendor/iperf-3.21/src/t_api
+vendor/iperf-3.21/src/t_auth
+vendor/iperf-3.21/src/t_timer
+vendor/iperf-3.21/src/t_units
+vendor/iperf-3.21/src/t_uuid
+vendor/iperf-3.21/examples/.deps/
+vendor/iperf-3.21/examples/.libs/
+vendor/iperf-3.21/examples/Makefile
+vendor/iperf-3.21/examples/*.o
+vendor/iperf-3.21/examples/mic
+vendor/iperf-3.21/examples/mis
