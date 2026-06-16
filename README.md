@@ -4,10 +4,16 @@ E2Speed 是一个面向桌面的网络测速工具，用图形界面封装 iperf
 
 它适合用来做局域网、专线、Wi-Fi、有线链路和服务器之间的吞吐测试。客户端和服务端都可以在界面里启动，测试过程会实时显示曲线、日志和摘要，并保留可复现的 iperf3 命令。
 
-测试页面
-![alt text](image.png)
-测试报告
-![alt text](image-1.png)
+## 界面预览
+
+测试页面：
+
+![E2Speed 测试页面](docs/images/test-workbench.png)
+
+测试报告：
+
+![E2Speed 测试报告](docs/images/test-report.png)
+
 ## 基于什么改造
 
 E2Speed 基于 iperf3 改造而来，但没有重写 iperf3 的测速逻辑。应用本身使用 Electron、React 和 TypeScript 开发，底层通过 Electron 主进程调用内置或用户指定的 `iperf3` 可执行文件。
