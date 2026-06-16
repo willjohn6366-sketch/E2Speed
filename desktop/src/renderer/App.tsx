@@ -144,6 +144,7 @@ function App() {
   const [udpMetrics, setUdpMetrics] = useState<IperfMetricPoint[]>([]);
   const [logs, setLogs] = useState<IperfLogEvent[]>([]);
   const [history, setHistory] = useState<RunSummary[]>(() => loadHistory());
+  const [currentSummary, setCurrentSummary] = useState<RunSummary | null>(null);
   const [message, setMessage] = useState("准备进行点对点带宽测试");
   const [suitePhase, setSuitePhase] = useState<SuitePhase>("idle");
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
@@ -211,6 +212,7 @@ function App() {
       setRunState(event.exitCode === 0 ? "completed" : "failed");
       setActiveRunId(null);
       setActiveRunMode(null);
+      if (event.exitCode === 0) setCurrentSummary(event.summary);
       saveReportToHistory(event.summary, setHistory);
       setMessage(event.exitCode === 0 ? "待运行" : failureMessageForRun(event.summary, logsRef.current));
     });
@@ -253,14 +255,9 @@ function App() {
       return;
     }
 
+    resetWorkbenchResults();
     setRunState("starting");
     setActiveRunMode("client");
-    setMetrics([]);
-    setPeerMetrics([]);
-    setPeerSummaries([]);
-    setTcpMetrics([]);
-    setUdpMetrics([]);
-    setLogs([]);
     setSuitePhase("tcp");
     setPhaseStartedAt(Date.now());
     suiteRef.current = { active: true, baseConfig: normalizeClientConfig(config) };
@@ -282,14 +279,9 @@ function App() {
   }
 
   async function startServer() {
+    resetWorkbenchResults();
     setRunState("starting");
     setActiveRunMode("server");
-    setMetrics([]);
-    setPeerMetrics([]);
-    setPeerSummaries([]);
-    setTcpMetrics([]);
-    setUdpMetrics([]);
-    setLogs([]);
     setPhaseStartedAt(Date.now());
     try {
       const result = await window.iperf.startServer(serverConfig);
@@ -314,6 +306,22 @@ function App() {
     setPhaseStartedAt(null);
   }
 
+  function resetWorkbenchResults() {
+    setActiveRunId(null);
+    setMetrics([]);
+    setPeerMetrics([]);
+    setPeerSummaries([]);
+    setTcpMetrics([]);
+    setUdpMetrics([]);
+    setLogs([]);
+    setCurrentSummary(null);
+    logsRef.current = [];
+    manuallyStoppedRunIdsRef.current.clear();
+    suiteRef.current = { active: false, baseConfig: null };
+    setSuitePhase("idle");
+    setPhaseStartedAt(null);
+  }
+
   function handleSuiteComplete(summary: RunSummary, exitCode: number | null): boolean {
     const suite = suiteRef.current;
     if (!suite.active) return false;
@@ -331,7 +339,7 @@ function App() {
         ...suite.baseConfig,
         protocol: "udp",
         parallel: 1,
-        bitrate: `${suite.baseConfig.targetMbps}M`
+        bitrate: `${qualityUdpMbps(suite.baseConfig, summary)}M`
       };
 
       void window.iperf.startClient(udpConfig).then((result) => {
@@ -359,6 +367,7 @@ function App() {
       setRunState(exitCode === 0 ? "completed" : "failed");
       setActiveRunId(null);
       setActiveRunMode(null);
+      if (exitCode === 0) setCurrentSummary(combined);
       saveReportToHistory(combined, setHistory);
       setMessage(exitCode === 0 ? "待运行" : failureMessageForRun(summary, logsRef.current));
       return true;
@@ -450,7 +459,7 @@ function App() {
                   tcpMetrics={tcpMetrics}
                   udpMetrics={udpMetrics}
                   targetMbps={clientConfig.targetMbps}
-                  lastSummary={history[0]}
+                  lastSummary={currentSummary ?? undefined}
                   phase={suitePhase}
                   isRunning={isRunning}
                   phaseStartedAt={phaseStartedAt}
@@ -681,6 +690,8 @@ function LiveResultPanel({
   const targetBits = parseMbpsBits(targetMbps || normalizedTargetMbpsFromSummary(lastSummary));
   const utilization = tcpReport && targetBits ? Math.min((tcpReport.rate / targetBits) * 100, 999) : null;
   const fullJudgement = tcpReport ? formatFullJudgement(tcpReport, udpReport, targetMbps || normalizedTargetMbpsFromSummary(lastSummary)) : "";
+  const lossGrade = gradePacketLoss(udpReport?.lostPercent);
+  const jitterGrade = gradeJitter(udpReport?.jitterMs);
   const heroRate = tcpReport ? (isActivelyTesting ? tcpReport.rate : tcpReport.avgRate) : null;
   const chartData = tcpMetrics.map((point) => ({
     time: point.seconds.toFixed(0),
@@ -777,7 +788,9 @@ function LiveResultPanel({
               <Eye size={16} /> 查询详情
             </button>
           </div>
-          <strong className="report-judgement">{fullJudgement}</strong>
+          <p className="current-report-line">
+            {fullJudgement}；丢包 {formatOptionalPercent(udpReport?.lostPercent)}（{lossGrade.label}），抖动 {formatOptionalMs(udpReport?.jitterMs)}（{jitterGrade.label}）
+          </p>
         </div>
       )}
       {selectedReport && (
@@ -1052,6 +1065,8 @@ function FullReportModal({
   const udpReport = udpReportFromSummary(summary);
   const targetMbps = normalizedTargetMbpsFromSummary(summary);
   const conclusion = formatFullJudgement(tcpReport, udpReport, targetMbps);
+  const lossGrade = gradePacketLoss(udpReport?.lostPercent);
+  const jitterGrade = gradeJitter(udpReport?.jitterMs);
   const config = summary.config;
   const duration = tcpReport ? (tcpReport.duration + (udpReport?.duration ?? 0)).toFixed(2) : "-";
   const reportNo = `LINK-${new Date(summary.startedAt).toISOString().slice(0, 10).replace(/-/g, "")}-${summary.runId.slice(0, 8).toUpperCase()}`;
@@ -1119,14 +1134,14 @@ function FullReportModal({
             rows={[
               ["平均带宽", tcpReport ? `${formatRate(tcpReport.avgRate)}/s` : "-", "峰值带宽", tcpReport ? `${formatRate(tcpReport.peakRate)}/s` : "-"],
               ["传输数据", tcpReport ? formatBytes(tcpReport.bytes) : "-", "TCP 重传", tcpReport?.retransmits !== undefined ? String(tcpReport.retransmits) : "-"],
-              ["UDP 丢包", udpReport?.lostPercent !== undefined ? `${udpReport.lostPercent.toFixed(2)}%` : "-", "UDP 抖动", udpReport?.jitterMs !== undefined ? `${udpReport.jitterMs.toFixed(2)} ms` : "-"]
+              ["UDP 丢包", qualityValue(formatOptionalPercent(udpReport?.lostPercent), lossGrade), "UDP 抖动", qualityValue(formatOptionalMs(udpReport?.jitterMs), jitterGrade)]
             ]}
           />
         </section>
 
         <section className="report-doc-section conclusion">
           <h2>四、测试结论</h2>
-          <p>{conclusion}</p>
+          <p>{conclusion}。{qualityAdvice(lossGrade, jitterGrade)}</p>
         </section>
 
         <section className="report-doc-section report-statement">
@@ -1460,6 +1475,53 @@ function reportFromMetrics(metrics: IperfMetricPoint[]): ReportStats | null {
     lostPercent: lastDefined(metrics, "lostPercent"),
     rttMs: lastDefined(metrics, "rttMs")
   };
+}
+
+function qualityUdpMbps(config: TestConfig, tcpSummary: RunSummary): number {
+  const nominalMbps = Number.parseFloat(config.targetMbps);
+  const tcpReport = reportFromSummary(tcpSummary);
+  const candidates = [
+    Number.isFinite(nominalMbps) && nominalMbps > 0 ? nominalMbps * 0.1 : null,
+    tcpReport && tcpReport.avgRate > 0 ? (tcpReport.avgRate / 1_000_000) * 0.2 : null,
+    100
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
+
+  return Math.max(1, Math.round(Math.min(...candidates)));
+}
+
+type QualityLevel = "优秀" | "良好" | "一般" | "较差" | "未获取";
+
+interface QualityGrade {
+  label: QualityLevel;
+  rank: number;
+}
+
+function gradePacketLoss(value?: number): QualityGrade {
+  if (value === undefined) return { label: "未获取", rank: 0 };
+  if (value <= 0.1) return { label: "优秀", rank: 4 };
+  if (value <= 0.5) return { label: "良好", rank: 3 };
+  if (value <= 1) return { label: "一般", rank: 2 };
+  return { label: "较差", rank: 1 };
+}
+
+function gradeJitter(value?: number): QualityGrade {
+  if (value === undefined) return { label: "未获取", rank: 0 };
+  if (value <= 5) return { label: "优秀", rank: 4 };
+  if (value <= 20) return { label: "良好", rank: 3 };
+  if (value <= 50) return { label: "一般", rank: 2 };
+  return { label: "较差", rank: 1 };
+}
+
+function qualityAdvice(loss: QualityGrade, jitter: QualityGrade): string {
+  const worst = Math.min(loss.rank || 4, jitter.rank || 4);
+  if (worst >= 4) return "链路质量稳定，可作为正常交付结果。";
+  if (worst === 3) return "链路质量整体可用，建议结合业务峰值时段复测。";
+  if (worst === 2) return "链路存在一定波动，建议检查带宽占用、队列拥塞或无线环境。";
+  return "链路质量偏差，建议降低 UDP 测试带宽后复测，并排查端口、设备性能和中间网络。";
+}
+
+function qualityValue(value: string, grade: QualityGrade): string {
+  return grade.label === "未获取" ? value : `${value}（${grade.label}）`;
 }
 
 function currentMetricSegment<T extends IperfMetricPoint>(metrics: T[]): T[] {
@@ -1821,8 +1883,10 @@ function formatFullJudgement(report: ReportStats | null, udpReport: ReportStats 
   if (!targetBits) return "缺少线路标称";
   const percent = (report.rate / targetBits) * 100;
   const target = `${Number(targetMbps).toFixed(Number(targetMbps) % 1 === 0 ? 0 : 1)}Mbps`;
+  const lossGrade = gradePacketLoss(udpReport?.lostPercent);
+  const jitterGrade = gradeJitter(udpReport?.jitterMs);
   const quality = udpReport
-    ? `；丢包 ${formatOptionalPercent(udpReport.lostPercent)}，抖动 ${formatOptionalMs(udpReport.jitterMs)}`
+    ? `；丢包 ${qualityValue(formatOptionalPercent(udpReport.lostPercent), lossGrade)}，抖动 ${qualityValue(formatOptionalMs(udpReport.jitterMs), jitterGrade)}`
     : "";
   if (percent > 150) {
     const multiple = report.rate / targetBits;
