@@ -150,6 +150,7 @@ function App() {
   const [now, setNow] = useState(Date.now());
   const suiteRef = useRef<ClientSuiteState>({ active: false, baseConfig: null });
   const logsRef = useRef<IperfLogEvent[]>([]);
+  const manuallyStoppedRunIdsRef = useRef<Set<string>>(new Set());
 
   const isRunning = runState === "starting" || runState === "running" || runState === "stopping";
 
@@ -198,6 +199,14 @@ function App() {
     });
     const offComplete = window.iperf?.onComplete((event) => {
       if (handleSuiteComplete(event.summary, event.exitCode)) return;
+
+      if (manuallyStoppedRunIdsRef.current.delete(event.runId)) {
+        setRunState("completed");
+        setActiveRunId(null);
+        setActiveRunMode(null);
+        setMessage(event.summary.config.mode === "server" ? "服务端已停止" : "测试已停止");
+        return;
+      }
 
       setRunState(event.exitCode === 0 ? "completed" : "failed");
       setActiveRunId(null);
@@ -296,7 +305,9 @@ function App() {
 
   async function stopRun() {
     if (!activeRunId) return;
+    manuallyStoppedRunIdsRef.current.add(activeRunId);
     setRunState("stopping");
+    setMessage("正在停止");
     await window.iperf.stop(activeRunId);
     suiteRef.current = { active: false, baseConfig: null };
     setSuitePhase("idle");
@@ -1307,9 +1318,12 @@ function AboutPanel({
     } else if (next.status === "not-available") {
       setUpdateMessage("当前已经是最新版本");
     } else if (next.status === "error") {
+      const noManifest = next.error === "NO_MANIFEST";
       setNoticeDialog({
-        title: "暂时无法检查更新",
-        message: "无法连接更新服务。当前环境可能没有互联网访问，稍后可以回到关于页面重新检查。"
+        title: noManifest ? "暂无更新清单" : "暂时无法检查更新",
+        message: noManifest
+          ? "仓库里的 version.json 还没有发布到可访问位置。更新清单可用后，这里就可以正常检查更新。"
+          : "无法连接更新服务。当前环境可能没有互联网访问，稍后可以回到关于页面重新检查。"
       });
     }
   }
@@ -1321,8 +1335,8 @@ function AboutPanel({
       if (next.status === "error") {
         setShowUpdateDialog(false);
         setNoticeDialog({
-          title: "自动更新启动失败",
-          message: "可以稍后重新尝试，或者前往最新 Release 页面手动下载安装包。"
+          title: "更新安装器启动失败",
+          message: "可以稍后重新尝试，或者前往下载页手动下载安装包。"
         });
       }
       return;

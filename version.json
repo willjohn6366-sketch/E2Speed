@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "name": "端端测速 v0.0.1",
+  "notes": [
+    "首个公开版本",
+    "支持客户端和服务端测速",
+    "支持 TCP/UDP 链路测试与测试报告导出"
+  ],
+  "releaseUrl": "https://gh-proxy.org/https://github.com/willjohn6366-sketch/E2Speed/releases/latest",
+  "downloads": {
+    "windowsX64": "https://gh-proxy.org/https://github.com/willjohn6366-sketch/E2Speed/releases/download/v0.0.1/%E7%AB%AF%E7%AB%AF%E6%B5%8B%E9%80%9F-0.0.1-windows-x64-setup.exe",
+    "macAppleSilicon": "https://gh-proxy.org/https://github.com/willjohn6366-sketch/E2Speed/releases/download/v0.0.1/%E7%AB%AF%E7%AB%AF%E6%B5%8B%E9%80%9F-0.0.1-macos-apple-silicon.dmg"
+  }
+}

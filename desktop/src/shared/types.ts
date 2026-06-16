@@ -82,6 +82,7 @@ export interface AppUpdateState {
   releaseName?: string;
   releaseNotes?: string;
   releaseUrl: string;
+  downloadUrl?: string;
   checkedAt?: string;
   error?: string;
   canInstallInApp: boolean;

@@ -1,8 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
-import { autoUpdater } from "electron-updater";
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import dgram, { type RemoteInfo, type Socket as UdpSocket } from "node:dgram";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import https from "node:https";
 import http, { type Server as HttpServer } from "node:http";
 import { networkInterfaces } from "node:os";
@@ -49,14 +48,12 @@ const DISCOVERY_RESPONSE_TYPE = "iperf3-visual-discovery-response";
 const DISCOVERY_VERSION = 1;
 const DISCOVERY_PORT = 55201;
 const DISCOVERY_TIMEOUT_MS = 1200;
-const RELEASE_API_URL = "https://api.github.com/repos/willjohn6366-sketch/E2Speed/releases/latest";
+const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/willjohn6366-sketch/E2Speed/main/version.json";
 const UPDATE_RELEASES_URL = "https://gh-proxy.org/https://github.com/willjohn6366-sketch/E2Speed/releases/latest";
 const UPDATE_CHECK_TIMEOUT_MS = 4500;
 
-app.setName("E2Speed");
+app.setName("端端测速");
 app.setAppUserModelId("com.e2speed.desktop");
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
 
 let updateState: AppUpdateState = createInitialUpdateState();
 
@@ -87,7 +84,7 @@ function createWindow(): void {
     minHeight: windowBounds.minHeight,
     backgroundColor: "#f6f7f2",
     frame: false,
-    title: "E2Speed",
+    title: "端端测速",
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -887,16 +884,18 @@ async function checkForUpdates({ silent }: { silent: boolean }): Promise<AppUpda
   }
 
   try {
-    const release = await requestLatestRelease();
-    const latestVersion = normalizeVersion(release.tag_name || release.name || "");
+    const manifest = await requestUpdateManifest();
+    const latestVersion = normalizeVersion(manifest.version || "");
     const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
+    const downloadUrl = updateDownloadUrl(manifest);
     return setUpdateState({
       status: hasUpdate ? "available" : "not-available",
       currentVersion,
       latestVersion: latestVersion || undefined,
-      releaseName: release.name || release.tag_name || undefined,
-      releaseNotes: stripReleaseMarkdown(release.body || ""),
-      releaseUrl: UPDATE_RELEASES_URL,
+      releaseName: manifest.name || (latestVersion ? `端端测速 v${latestVersion}` : undefined),
+      releaseNotes: releaseNotesText(manifest),
+      releaseUrl: manifest.releaseUrl || UPDATE_RELEASES_URL,
+      downloadUrl,
       checkedAt: new Date().toISOString(),
       canInstallInApp: process.platform === "win32",
       platform: process.platform
@@ -914,7 +913,7 @@ async function checkForUpdates({ silent }: { silent: boolean }): Promise<AppUpda
 
 async function installUpdate(): Promise<AppUpdateState> {
   if (process.platform !== "win32") {
-    await shell.openExternal(UPDATE_RELEASES_URL);
+    await shell.openExternal(updateState.releaseUrl || UPDATE_RELEASES_URL);
     return updateState;
   }
 
@@ -925,12 +924,16 @@ async function installUpdate(): Promise<AppUpdateState> {
 
   setUpdateState({ ...updateState, status: "downloading", error: undefined });
   try {
-    autoUpdater.autoDownload = false;
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) throw new Error("没有获取到可用的更新包");
-    await autoUpdater.downloadUpdate();
-    autoUpdater.quitAndInstall(false, true);
-    return updateState;
+    if (!updateState.downloadUrl) throw new Error("更新清单缺少 Windows 安装包下载地址");
+    const installerPath = await downloadUpdateInstaller(updateState.downloadUrl, updateState.latestVersion || "latest");
+    const child = spawn(installerPath, [], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    });
+    child.unref();
+    setTimeout(() => app.quit(), 600);
+    return setUpdateState({ ...updateState, status: "not-available" });
   } catch (error) {
     return setUpdateState({
       ...updateState,
@@ -941,19 +944,28 @@ async function installUpdate(): Promise<AppUpdateState> {
   }
 }
 
-interface GithubReleaseResponse {
-  tag_name?: string;
+interface UpdateManifest {
+  version?: string;
   name?: string;
-  body?: string;
+  notes?: string | string[];
+  releaseUrl?: string;
+  downloads?: {
+    windowsX64?: string;
+    macAppleSilicon?: string;
+  };
 }
 
-function requestLatestRelease(): Promise<GithubReleaseResponse> {
+function requestUpdateManifest(): Promise<UpdateManifest> {
+  return requestJson(UPDATE_MANIFEST_URL);
+}
+
+function requestJson<T>(url: string, redirects = 0): Promise<T> {
   return new Promise((resolve, reject) => {
     const request = https.get(
-      RELEASE_API_URL,
+      url,
       {
         headers: {
-          "Accept": "application/vnd.github+json",
+          "Accept": "application/json",
           "User-Agent": "E2Speed"
         },
         timeout: UPDATE_CHECK_TIMEOUT_MS
@@ -961,7 +973,13 @@ function requestLatestRelease(): Promise<GithubReleaseResponse> {
       (response) => {
         if ((response.statusCode ?? 0) >= 300 && (response.statusCode ?? 0) < 400 && response.headers.location) {
           response.resume();
-          reject(new Error("更新检查被重定向，请稍后重试"));
+          if (redirects >= 3) reject(new Error("更新检查被重定向过多次"));
+          else resolve(requestJson<T>(new URL(response.headers.location, url).toString(), redirects + 1));
+          return;
+        }
+        if (response.statusCode === 404) {
+          response.resume();
+          reject(new Error("NO_MANIFEST"));
           return;
         }
         if (response.statusCode !== 200) {
@@ -980,7 +998,7 @@ function requestLatestRelease(): Promise<GithubReleaseResponse> {
         });
         response.on("end", () => {
           try {
-            resolve(JSON.parse(body || "{}"));
+            resolve(JSON.parse(body || "{}") as T);
           } catch {
             reject(new Error("更新信息解析失败"));
           }
@@ -989,6 +1007,50 @@ function requestLatestRelease(): Promise<GithubReleaseResponse> {
     );
 
     request.on("timeout", () => request.destroy(new Error("更新检查超时")));
+    request.on("error", reject);
+  });
+}
+
+function updateDownloadUrl(manifest: UpdateManifest): string | undefined {
+  if (process.platform === "win32") return manifest.downloads?.windowsX64;
+  if (process.platform === "darwin") return manifest.downloads?.macAppleSilicon;
+  return undefined;
+}
+
+function releaseNotesText(manifest: UpdateManifest): string | undefined {
+  if (Array.isArray(manifest.notes)) return manifest.notes.map((item) => `- ${item}`).join("\n");
+  return manifest.notes;
+}
+
+function downloadUpdateInstaller(url: string, version: string): Promise<string> {
+  const dir = mkdtempSync(path.join(app.getPath("temp"), "e2speed-update-"));
+  const file = path.join(dir, `端端测速-${normalizeVersion(version)}-windows-x64-setup.exe`);
+  return downloadFile(url, file);
+}
+
+function downloadFile(url: string, destination: string, redirects = 0): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, { headers: { "User-Agent": "E2Speed" } }, (response) => {
+      if ((response.statusCode ?? 0) >= 300 && (response.statusCode ?? 0) < 400 && response.headers.location) {
+        response.resume();
+        if (redirects >= 5) reject(new Error("更新包下载被重定向过多次"));
+        else resolve(downloadFile(new URL(response.headers.location, url).toString(), destination, redirects + 1));
+        return;
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`更新包下载失败：HTTP ${response.statusCode ?? "unknown"}`));
+        return;
+      }
+
+      const file = createWriteStream(destination);
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(() => resolve(destination));
+      });
+      file.on("error", reject);
+    });
+
     request.on("error", reject);
   });
 }

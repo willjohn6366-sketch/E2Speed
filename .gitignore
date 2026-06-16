@@ -45,6 +45,7 @@ desktop/*.tsbuildinfo
 *.dmg
 *.zip
 *.exe
+!resources/bin/win32/iperf3.exe
 *.AppImage
 *.deb
 *.rpm
