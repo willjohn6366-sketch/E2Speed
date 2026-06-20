@@ -789,7 +789,7 @@ function LiveResultPanel({
             </button>
           </div>
           <p className="current-report-line">
-            {fullJudgement}；丢包 {formatOptionalPercent(udpReport?.lostPercent)}（{lossGrade.label}），抖动 {formatOptionalMs(udpReport?.jitterMs)}（{jitterGrade.label}）
+            {fullJudgement}
           </p>
         </div>
       )}

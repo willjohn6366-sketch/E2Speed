@@ -14,12 +14,7 @@
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
   },
-  "dependencies": {
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.15.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
@@ -29,6 +24,10 @@
     "cross-env": "^7.0.3",
     "electron": "^31.7.7",
     "electron-builder": "^26.15.3",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
     "typescript": "^5.5.3",
     "vite": "^5.4.19",
     "wait-on": "^7.2.0"
@@ -46,15 +45,15 @@
       "version.json",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "../resources",
-        "to": "resources"
-      }
-    ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.utilities",
+      "extraResources": [
+        {
+          "from": "../resources/bin/darwin",
+          "to": "resources/bin/darwin"
+        }
+      ],
       "target": [
         "dmg"
       ],
@@ -62,6 +61,13 @@
     },
     "win": {
       "artifactName": "端端测速-${version}-windows-x64-setup.${ext}",
+      "signExecutable": false,
+      "extraResources": [
+        {
+          "from": "../resources/bin/win32",
+          "to": "resources/bin/win32"
+        }
+      ],
       "target": [
         "nsis"
       ]
